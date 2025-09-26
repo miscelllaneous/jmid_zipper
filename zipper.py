@@ -112,7 +112,7 @@ def main():
     # 逆順をオプション化する
     parser.add_argument(
         '--reverse',
-        action='store_false',
+        action='store_true',
         help='サブディレクトリを逆順で処理する'
     )
 
