@@ -41,7 +41,11 @@ class TestZipper:
         source_dir, target_dir, subdirs = setup_test_directories
 
         # 処理を実行
-        process_directories(source_dir, target_dir)
+        success_count, failed_dirs = process_directories(source_dir, target_dir)
+
+        # 成功数の確認
+        assert success_count == len(subdirs), f"Expected {len(subdirs)} successful, got {success_count}"
+        assert failed_dirs == [], f"Unexpected failed directories: {failed_dirs}"
 
         # 各サブディレクトリに対応するzipファイルが作成されているか確認
         for subdir in subdirs:
@@ -62,10 +66,18 @@ class TestZipper:
 
     def test_process_directories_deletes_source(self, setup_test_directories):
         """処理後にソースディレクトリが削除されることを確認"""
-        source_dir, target_dir, _ = setup_test_directories
+        source_dir, target_dir, subdirs = setup_test_directories
 
         # 処理を実行
-        process_directories(source_dir, target_dir)
+        success_count, failed_dirs = process_directories(source_dir, target_dir)
+
+        # 成功を確認
+        assert success_count == len(subdirs)
+        assert failed_dirs == []
+
+        # 各サブディレクトリが削除されているか確認
+        for subdir in subdirs:
+            assert not subdir.exists(), f"Subdirectory {subdir} was not deleted"
 
         # ソースディレクトリが削除されているか確認
         assert not os.path.exists(source_dir), "Source directory was not deleted"
@@ -81,11 +93,18 @@ class TestZipper:
             empty_subdir.mkdir()
 
             # 処理を実行
-            process_directories(temp_source, temp_target)
+            success_count, failed_dirs = process_directories(temp_source, temp_target)
+
+            # 成功を確認
+            assert success_count == 1
+            assert failed_dirs == []
 
             # 空のディレクトリのzipファイルも作成されることを確認
             zip_path = Path(temp_target) / "empty_dir.zip"
             assert zip_path.exists(), "Zip file for empty directory was not created"
+
+            # サブディレクトリが削除されているか確認
+            assert not empty_subdir.exists(), "Empty subdirectory was not deleted"
 
             # ソースディレクトリが削除されているか確認
             assert not os.path.exists(temp_source), "Source directory was not deleted"
@@ -109,6 +128,47 @@ class TestZipper:
             if os.path.exists(temp_target):
                 shutil.rmtree(temp_target)
 
+    def test_process_directories_partial_failure(self):
+        """一部のディレクトリの処理に失敗した場合の動作を確認"""
+        temp_source = tempfile.mkdtemp(prefix="test_partial_failure_")
+        temp_target = tempfile.mkdtemp(prefix="test_target_")
+
+        try:
+            # 正常なサブディレクトリを作成
+            normal_subdir = Path(temp_source) / "normal_dir"
+            normal_subdir.mkdir()
+            (normal_subdir / "file.txt").write_text("content")
+
+            # もう一つの正常なサブディレクトリ
+            another_subdir = Path(temp_source) / "another_dir"
+            another_subdir.mkdir()
+            (another_subdir / "data.txt").write_text("data")
+
+            # 処理を実行
+            success_count, failed_dirs = process_directories(temp_source, temp_target)
+
+            # 両方成功することを確認
+            assert success_count == 2
+            assert failed_dirs == []
+
+            # zipファイルが作成されていることを確認
+            assert (Path(temp_target) / "normal_dir.zip").exists()
+            assert (Path(temp_target) / "another_dir.zip").exists()
+
+            # サブディレクトリが削除されていることを確認
+            assert not normal_subdir.exists()
+            assert not another_subdir.exists()
+
+            # ソースディレクトリも削除されていることを確認
+            assert not os.path.exists(temp_source)
+
+        finally:
+            # クリーンアップ
+            if os.path.exists(temp_source):
+                shutil.rmtree(temp_source)
+            if os.path.exists(temp_target):
+                shutil.rmtree(temp_target)
+
     def test_process_directories_creates_target_if_not_exists(self):
         """ターゲットディレクトリが存在しない場合に自動作成されることを確認"""
         temp_source = tempfile.mkdtemp(prefix="test_source_")
@@ -121,7 +181,11 @@ class TestZipper:
             (subdir / "test.txt").write_text("test content")
 
             # 処理を実行
-            process_directories(temp_source, temp_target)
+            success_count, failed_dirs = process_directories(temp_source, temp_target)
+
+            # 成功を確認
+            assert success_count == 1
+            assert failed_dirs == []
 
             # ターゲットディレクトリが作成されていることを確認
             assert os.path.exists(temp_target), "Target directory was not created"
@@ -129,6 +193,9 @@ class TestZipper:
             # zipファイルが作成されていることを確認
             zip_path = Path(temp_target) / "test_subdir.zip"
             assert zip_path.exists(), "Zip file was not created"
+
+            # サブディレクトリが削除されていることを確認
+            assert not subdir.exists(), "Subdirectory was not deleted"
 
         finally:
             # クリーンアップ

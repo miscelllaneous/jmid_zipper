@@ -10,6 +10,8 @@ def process_directories(source_dir, target_dir):
     指定されたディレクトリ内のすべてのサブディレクトリをzipファイルに圧縮し、
     指定されたターゲットディレクトリに移動後、元のディレクトリを削除する。
 
+    各サブディレクトリは、zipファイルの作成が成功した後に個別に削除される。
+
     Args:
         source_dir (str): 処理対象のディレクトリパス
         target_dir (str): zipファイルの出力先ディレクトリパス
@@ -33,27 +35,60 @@ def process_directories(source_dir, target_dir):
     # サブディレクトリのリストを取得
     subdirectories = [d for d in source_path.iterdir() if d.is_dir()]
 
+    # 処理結果を記録
+    successful_count = 0
+    failed_dirs = []
+
     # 各サブディレクトリを処理
     for subdir in subdirectories:
-        # zipファイル名を作成
-        zip_filename = f"{subdir.name}.zip"
-        zip_filepath = target_path / zip_filename
+        try:
+            # zipファイル名を作成
+            zip_filename = f"{subdir.name}.zip"
+            zip_filepath = target_path / zip_filename
 
-        # zipファイルを作成
-        with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            # サブディレクトリ内のすべてのファイルをzipに追加
-            for root, dirs, files in os.walk(subdir):
-                for file in files:
-                    file_path = Path(root) / file
-                    # zipファイル内での相対パスを作成
-                    arcname = file_path.relative_to(subdir)
-                    zipf.write(file_path, arcname)
+            # zipファイルを作成
+            with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # サブディレクトリ内のすべてのファイルをzipに追加
+                for root, dirs, files in os.walk(subdir):
+                    for file in files:
+                        file_path = Path(root) / file
+                        # zipファイル内での相対パスを作成
+                        arcname = file_path.relative_to(subdir)
+                        zipf.write(file_path, arcname)
 
-        print(f"Created: {zip_filepath}")
+            print(f"Created: {zip_filepath}")
 
-    # 元のディレクトリを削除
-    shutil.rmtree(source_path)
-    print(f"Deleted source directory: {source_dir}")
+            # zipファイルが正常に作成されたことを確認
+            if zip_filepath.exists() and zip_filepath.stat().st_size > 0:
+                # サブディレクトリを削除
+                shutil.rmtree(subdir)
+                print(f"Deleted: {subdir}")
+                successful_count += 1
+            else:
+                print(f"Warning: Zip file creation may have failed for {subdir}")
+                failed_dirs.append(subdir.name)
+
+        except Exception as e:
+            print(f"Error processing {subdir}: {e}")
+            failed_dirs.append(subdir.name)
+
+    # すべてのサブディレクトリが削除された場合のみ、ソースディレクトリ自体を削除
+    remaining_items = list(source_path.iterdir())
+    if not remaining_items:
+        # 空のソースディレクトリを削除
+        source_path.rmdir()
+        print(f"Deleted empty source directory: {source_dir}")
+    else:
+        print(f"Note: Source directory {source_dir} still contains items and was not deleted")
+        if failed_dirs:
+            print(f"Failed to process: {', '.join(failed_dirs)}")
+
+    # 処理結果を報告
+    print(f"\n処理完了: {successful_count}/{len(subdirectories)} ディレクトリを正常に圧縮・削除しました")
+
+    if failed_dirs:
+        return successful_count, failed_dirs
+    return successful_count, []
 
 
 def main():
