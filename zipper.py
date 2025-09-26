@@ -1,0 +1,89 @@
+import os
+import shutil
+import zipfile
+import argparse
+from pathlib import Path
+
+
+def process_directories(source_dir, target_dir):
+    """
+    指定されたディレクトリ内のすべてのサブディレクトリをzipファイルに圧縮し、
+    指定されたターゲットディレクトリに移動後、元のディレクトリを削除する。
+
+    Args:
+        source_dir (str): 処理対象のディレクトリパス
+        target_dir (str): zipファイルの出力先ディレクトリパス
+
+    Raises:
+        FileNotFoundError: ソースディレクトリが存在しない場合
+    """
+    source_path = Path(source_dir)
+    target_path = Path(target_dir)
+
+    # ソースディレクトリの存在確認
+    if not source_path.exists():
+        raise FileNotFoundError(f"Source directory does not exist: {source_dir}")
+
+    if not source_path.is_dir():
+        raise NotADirectoryError(f"Source path is not a directory: {source_dir}")
+
+    # ターゲットディレクトリが存在しない場合は作成
+    target_path.mkdir(parents=True, exist_ok=True)
+
+    # サブディレクトリのリストを取得
+    subdirectories = [d for d in source_path.iterdir() if d.is_dir()]
+
+    # 各サブディレクトリを処理
+    for subdir in subdirectories:
+        # zipファイル名を作成
+        zip_filename = f"{subdir.name}.zip"
+        zip_filepath = target_path / zip_filename
+
+        # zipファイルを作成
+        with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # サブディレクトリ内のすべてのファイルをzipに追加
+            for root, dirs, files in os.walk(subdir):
+                for file in files:
+                    file_path = Path(root) / file
+                    # zipファイル内での相対パスを作成
+                    arcname = file_path.relative_to(subdir)
+                    zipf.write(file_path, arcname)
+
+        print(f"Created: {zip_filepath}")
+
+    # 元のディレクトリを削除
+    shutil.rmtree(source_path)
+    print(f"Deleted source directory: {source_dir}")
+
+
+def main():
+    """CLIエントリーポイント"""
+    parser = argparse.ArgumentParser(
+        description='ディレクトリ内のサブディレクトリをzipファイルに圧縮して移動'
+    )
+    parser.add_argument(
+        'source_dir',
+        help='処理対象のソースディレクトリ'
+    )
+    parser.add_argument(
+        'target_dir',
+        help='zipファイルの出力先ディレクトリ'
+    )
+
+    args = parser.parse_args()
+
+    try:
+        process_directories(args.source_dir, args.target_dir)
+        print("処理が完了しました。")
+    except FileNotFoundError as e:
+        print(f"エラー: {e}")
+        return 1
+    except Exception as e:
+        print(f"予期しないエラーが発生しました: {e}")
+        return 1
+
+    return 0
+
+
+if __name__ == "__main__":
+    exit(main())

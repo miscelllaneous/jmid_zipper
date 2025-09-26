@@ -1,0 +1,40 @@
+# ===============================================
+# Directory Zipper 設定ファイル (PowerShell版)
+# ===============================================
+#
+# このファイルをzipper_config.ps1という名前でコピーして、
+# デフォルトのディレクトリを設定してください。
+#
+# 使用例:
+#   Copy-Item zipper_config.ps1.sample zipper_config.ps1
+#   zipper_config.ps1を編集
+#
+
+# デフォルトのソースディレクトリ
+# （処理対象のディレクトリ）
+$DefaultSourceDir = "C:\Users\$env:USERNAME\Documents\ToZip"
+
+# デフォルトのターゲットディレクトリ
+# （zipファイルの保存先）
+$DefaultTargetDir = "C:\Users\$env:USERNAME\Documents\Backups"
+
+# ===============================================
+# 設定例
+# ===============================================
+#
+# 例1: ユーザーのドキュメントフォルダ内
+# $DefaultSourceDir = "C:\Users\$env:USERNAME\Documents\Projects"
+# $DefaultTargetDir = "C:\Users\$env:USERNAME\Documents\Archive"
+#
+# 例2: 固定のパス
+# $DefaultSourceDir = "D:\WorkSpace\temp"
+# $DefaultTargetDir = "D:\Backup\zip"
+#
+# 例3: ネットワークドライブ
+# $DefaultSourceDir = "\\server\share\projects"
+# $DefaultTargetDir = "\\server\backup\archives"
+#
+# 例4: 環境変数を使った設定
+# $DefaultSourceDir = "$env:USERPROFILE\Desktop\ToCompress"
+# $DefaultTargetDir = "$env:TEMP\ZipArchives"
+#
