@@ -5,7 +5,7 @@ import argparse
 from pathlib import Path
 
 
-def process_directories(source_dir, target_dir):
+def process_directories(source_dir, target_dir, reverse=False):
     """
     指定されたディレクトリ内のすべてのサブディレクトリをzipファイルに圧縮し、
     指定されたターゲットディレクトリに移動後、元のディレクトリを削除する。
@@ -34,6 +34,10 @@ def process_directories(source_dir, target_dir):
 
     # サブディレクトリのリストを取得
     subdirectories = [d for d in source_path.iterdir() if d.is_dir()]
+
+    # 逆順にする
+    if reverse:
+        subdirectories.sort(reverse=True)
 
     # 処理結果を記録
     successful_count = 0
@@ -105,10 +109,17 @@ def main():
         help='zipファイルの出力先ディレクトリ'
     )
 
+    # 逆順をオプション化する
+    parser.add_argument(
+        '--reverse',
+        action='store_false',
+        help='サブディレクトリを逆順で処理する'
+    )
+
     args = parser.parse_args()
 
     try:
-        process_directories(args.source_dir, args.target_dir)
+        process_directories(args.source_dir, args.target_dir, reverse=args.reverse)
         print("処理が完了しました。")
     except FileNotFoundError as e:
         print(f"エラー: {e}")
