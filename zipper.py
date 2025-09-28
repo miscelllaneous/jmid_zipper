@@ -3,18 +3,65 @@ import shutil
 import zipfile
 import argparse
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 
-def process_directories(source_dir, target_dir, reverse=False):
+def process_single_directory(subdir, target_path):
+    """
+    単一のディレクトリをzipファイルに圧縮する。
+
+    Args:
+        subdir (Path): 処理対象のサブディレクトリ
+        target_path (Path): zipファイルの出力先ディレクトリ
+
+    Returns:
+        tuple: (成功フラグ, サブディレクトリ名)
+    """
+    try:
+        # zipファイル名を作成
+        zip_filename = f"{subdir.name}.zip"
+        zip_filepath = target_path / zip_filename
+
+        # zipファイルを作成
+        with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # サブディレクトリ内のすべてのファイルをzipに追加
+            for root, dirs, files in os.walk(subdir):
+                for file in files:
+                    file_path = Path(root) / file
+                    # zipファイル内での相対パスを作成
+                    arcname = file_path.relative_to(subdir)
+                    zipf.write(file_path, arcname)
+
+        print(f"[Thread-{threading.current_thread().name}] Created: {zip_filepath}")
+
+        # zipファイルが正常に作成されたことを確認
+        if zip_filepath.exists() and zip_filepath.stat().st_size > 0:
+            # サブディレクトリを削除
+            shutil.rmtree(subdir)
+            print(f"[Thread-{threading.current_thread().name}] Deleted: {subdir}")
+            return True, subdir.name
+        else:
+            print(f"[Thread-{threading.current_thread().name}] Warning: Zip file creation may have failed for {subdir}")
+            return False, subdir.name
+
+    except Exception as e:
+        print(f"[Thread-{threading.current_thread().name}] Error processing {subdir}: {e}")
+        return False, subdir.name
+
+
+def process_directories(source_dir, target_dir, reverse=False, max_workers=None):
     """
     指定されたディレクトリ内のすべてのサブディレクトリをzipファイルに圧縮し、
     指定されたターゲットディレクトリに移動後、元のディレクトリを削除する。
 
-    各サブディレクトリは、zipファイルの作成が成功した後に個別に削除される。
+    ThreadPoolExecutorを使用して並列処理を行う。
 
     Args:
         source_dir (str): 処理対象のディレクトリパス
         target_dir (str): zipファイルの出力先ディレクトリパス
+        reverse (bool): 逆順で処理するかどうか
+        max_workers (int): 最大ワーカー数（Noneの場合はCPU数*5）
 
     Raises:
         FileNotFoundError: ソースディレクトリが存在しない場合
@@ -43,38 +90,23 @@ def process_directories(source_dir, target_dir, reverse=False):
     successful_count = 0
     failed_dirs = []
 
-    # 各サブディレクトリを処理
-    for subdir in subdirectories:
-        try:
-            # zipファイル名を作成
-            zip_filename = f"{subdir.name}.zip"
-            zip_filepath = target_path / zip_filename
+    # ThreadPoolExecutorで並列処理
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # 各サブディレクトリの処理をサブミット
+        future_to_subdir = {
+            executor.submit(process_single_directory, subdir, target_path): subdir
+            for subdir in subdirectories
+        }
 
-            # zipファイルを作成
-            with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                # サブディレクトリ内のすべてのファイルをzipに追加
-                for root, dirs, files in os.walk(subdir):
-                    for file in files:
-                        file_path = Path(root) / file
-                        # zipファイル内での相対パスを作成
-                        arcname = file_path.relative_to(subdir)
-                        zipf.write(file_path, arcname)
+        # 完了したタスクから順次結果を処理
+        for future in as_completed(future_to_subdir):
+            subdir = future_to_subdir[future]
+            success, dir_name = future.result()
 
-            print(f"Created: {zip_filepath}")
-
-            # zipファイルが正常に作成されたことを確認
-            if zip_filepath.exists() and zip_filepath.stat().st_size > 0:
-                # サブディレクトリを削除
-                shutil.rmtree(subdir)
-                print(f"Deleted: {subdir}")
+            if success:
                 successful_count += 1
             else:
-                print(f"Warning: Zip file creation may have failed for {subdir}")
-                failed_dirs.append(subdir.name)
-
-        except Exception as e:
-            print(f"Error processing {subdir}: {e}")
-            failed_dirs.append(subdir.name)
+                failed_dirs.append(dir_name)
 
     # すべてのサブディレクトリが削除された場合のみ、ソースディレクトリ自体を削除
     remaining_items = list(source_path.iterdir())
@@ -115,11 +147,17 @@ def main():
         action='store_true',
         help='サブディレクトリを逆順で処理する'
     )
+    parser.add_argument(
+        '--max-workers',
+        type=int,
+        default=None,
+        help='最大ワーカースレッド数（デフォルト: CPU数*5）'
+    )
 
     args = parser.parse_args()
 
     try:
-        process_directories(args.source_dir, args.target_dir, reverse=args.reverse)
+        process_directories(args.source_dir, args.target_dir, reverse=args.reverse, max_workers=args.max_workers)
         print("処理が完了しました。")
     except FileNotFoundError as e:
         print(f"エラー: {e}")
